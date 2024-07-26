@@ -76,22 +76,44 @@ with DAG(
         task_id='err_report',
         bash_command='''
             echo 'err report'
-        ''',
+''',
         trigger_rule='one_failed'
     )
     
     task_done = BashOperator(
-        task_id='make_done',
+        task_id='simple_done',
         bash_command='''
-            echo 'touch _done'
-            mkdir -p ~/data/done/{{ds_nodash}}
-            touch ~/data/done/{{ds_nodash}}/_DONE
+            echo 'making simple_bash_DONE'
+            SIMPLE_BASH_DONE_PATH={{ var.value.DONE_PATH }}/{{ds_nodash}}
+
+            mkdir -p $SIMPLE_BASH_DONE_PATH
+            touch $SIMPLE_BASH_DONE_PATH/simple_bash_DONE
         ''',
-        trigger_rule="all_done"
+        trigger_rule="all_success"
     )
 
-    task_end = EmptyOperator(task_id='end', trigger_rule="all_done")
-    task_start = EmptyOperator(task_id='start')
+    task_end = BashOperator(
+        task_id='end', 
+        bash_command='''
+            figlet "simple_bash_end"
+        ''',
+        trigger_rule="all_done"
+)
+
+    task_start = BashOperator(
+        task_id='start',
+        bash_command='''    
+            figlet "simple_bash"
+            SIMPLE_BASH_DONE={{ var.value.DONE_PATH }}/{{ds_nodash}}/simple_bash_DONE 
+            echo "checking $SIMPLE_BASH_DONE..."
+            if [[ -e "$SIMPLE_BASH_DONE" ]]; then
+                rm $SIMPLE_BASH_DONE
+                echo 'deleting preexisting _DONE flags...'
+            else
+                echo 'Found no preexisting _DONE flags. Continue...'
+            fi
+        '''
+    )
 
     task_start >> task_date
     task_date >> task_copy 
