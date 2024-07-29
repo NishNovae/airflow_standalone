@@ -5,8 +5,12 @@ from airflow import DAG
 
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-
-from airflow.operators.python import PythonOperator
+from airflow.operators.python import (
+    ExternalPythonOperator,
+    PythonOperator,
+    PythonVirtualenvOperator,
+    is_venv_installed,
+)
 
 from pprint import pprint
 
@@ -51,16 +55,19 @@ with DAG(
         print("::endgroup::")
         return "Whatever you return gets printed in the logs"
 
-    run_this = PythonOperator(
+    run_this = PythonVirtualenvOperator(
         task_id="print_the_context", 
-        python_callable=print_context
+        python_callable=print_context,
     )
 
     task_start = EmptyOperator(task_id = 'start')
 
-    task_getdata = PythonOperator(
-        task_id = 'get_data',
-        python_callable=get_data
+    task_getdata = PythonVirtualenvOperator(
+        task_id = 'get_data',   # ds, **kwargs given when called
+        python_callable=get_data,
+    
+        requirements = ["git+https://github.com/NishNovae/movie.git@0.2/refractoring"],
+        system_site_packages=False
     )
 
     task_savedata = BashOperator(
