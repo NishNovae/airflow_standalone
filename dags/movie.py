@@ -76,7 +76,7 @@ with DAG(
 
     # task start & finish
     task_start = EmptyOperator(task_id = 'start', trigger_rule = 'all_done')
-    task_end = EmptyOperator(task_id = 'end', trigger_rule = 'all_success')
+    task_end = EmptyOperator(task_id = 'end', trigger_rule = 'all_done')
 
     # Multitool Tasks
     mult_y = PythonVirtualenvOperator(
