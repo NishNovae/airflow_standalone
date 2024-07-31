@@ -31,11 +31,9 @@ with DAG(
         print(ds)
         print(kwargs)
         print("=" * 20) 
-        #print(f"ds_nodash => {kwargs['ds_nodash']}")
         print(f"kwargs type => {type(kwargs)}")
         print("=" * 20)
 
-        # the question
         from mov.api.call import save2df, list2df, get_key, req, gen_url
         key = get_key()
         print(f"MOVIE_API_KEY => {key}")
@@ -81,19 +79,28 @@ with DAG(
         python_callable=branch_fun
     )
 
-    run_this = PythonOperator(
-        task_id="print_the_context", 
-        python_callable=print_context,
-    )
+#    run_this = PythonOperator(
+#        task_id="print_the_context", 
+#        python_callable=print_context,
+#    )
 
-    task_start = EmptyOperator(task_id = 'start')
+    task_start = EmptyOperator(task_id = 'start', trigger_rule = 'all_done')
+    task_end = EmptyOperator(task_id = 'end', trigger_rule = 'all_success')
+
+    mult_y = EmptyOperator(task_id = 'mult.yn', trigger_rule = 'all_done')        # 
+    mult_n = EmptyOperator(task_id = 'mult.n', trigger_rule = 'all_done')
+    nation_k = EmptyOperator(task_id = 'nat.k', trigger_rule = 'all_done')
+    nation_f = EmptyOperator(task_id = 'nat.f', trigger_rule = 'all_done')
+
+    get_start = EmptyOperator(task_id = 'get_start', trigger_rule = 'all_done')
+    get_end = EmptyOperator(task_id = 'get_end')
 
     task_getdata = PythonVirtualenvOperator(
         task_id = 'get_data',   # ds, **kwargs given when called
         python_callable=get_data, 
-        requirements = ["git+https://github.com/NishNovae/movie.git@0.2/refractoring"],
+        requirements = ["git+https://github.com/NishNovae/movie.git@main"],
         system_site_packages=False,
-        trigger_rule="all_done",
+        trigger_rule="all_success",
         venv_cache_path="/home/nishtala/tmp/airflow_venv/get_data"       # only absolute path
     )
 
@@ -115,23 +122,20 @@ with DAG(
         trigger_rule = "all_done"
     )
 
-    join_task = BashOperator(
-        task_id = "join",
+    throw_err = BashOperator(
+        task_id = "err",
         bash_command = "exit 1",
         trigger_rule="one_success"
     )
 
-    task_end = EmptyOperator(task_id = 'end', trigger_rule = 'all_done')
-
-
     # DAG flow
     task_start >> branch_op
-    task_start >> join_task >> task_savedata
+    task_start >> throw_err >> task_savedata
 
-    branch_op >> rm_dir >> task_getdata
-    branch_op >> echo_task >> task_savedata
-    branch_op >> task_getdata
-    
-    task_getdata >> task_savedata >> task_end
-#    rm_dir >> task_getdata
-#    task_start >> run_this >> task_end
+    branch_op >> [rm_dir, echo_task]
+    branch_op >> get_start
+
+    rm_dir >> get_start
+
+    get_start >> [task_getdata, mult_y, mult_n, nation_k, nation_f] >> get_end
+    get_end >> task_savedata >> task_end
