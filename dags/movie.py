@@ -22,21 +22,12 @@ with DAG(
     },
     description='movie DAG',
     schedule="10 2 * * *",
-    start_date=datetime(2024, 7, 10),
+    start_date=datetime(2024, 7, 25),
     catchup=True,
     tags=['api', 'movie', 'amt'],
 ) as dag:
 
-##### FUNCTIONS
-
-    # save data
-    def save_data(ds_nodash):
-        from mov.api.call import apply_type2df
-        df = apply_type2df(load_dt=ds_nodash) 
-        print("*"*33)
-        print(df.head(10))
-        print("*"*33)
-        print(df.dtypes)
+###### FUNCTIONS
 
     # branch
     def branch_fun(ds_nodash):
@@ -50,23 +41,32 @@ with DAG(
         if os.path.exists(f"code/movie_saved/load_dt={ds_nodash}"):
             return "rm_dir"
         else:
-            return "get_data", "echo_task"        # ?
+            return  "echo_task"        # ?
 
     # Multitool
     def func_multitool(**kwargs):
-        from mov.api.call import save2df
+        from mov.api.call import save2df, list2df
 
-        url_p = kwargs['url_param']
+        url_p = kwargs['url_param']         # { KEY: VAL }
+        key = next(iter(url_p))             # returns KEY
         ds_nodash = kwargs['ds_nodash']
+        PARQ_PATH="/home/nishtala/code/movie_saved/"
 
         print(url_p)
         print(ds_nodash)
 
-        df = save2df(load_dt=ds_nodash, url_param= url_p)
-        print(df.head(5))
+        # create pandas dataframe
+        df = list2df(load_dt = ds_nodash, url_param = url_p)
 
+        # add two new columns
+        df['load_dt'] = ds_nodash
+        df[str(key)] = url_p[key]
 
-####### TASKS
+        # parquet, partition, save
+        df.to_parquet(PARQ_PATH, partition_cols=['load_dt', str(key)])
+
+        
+###### TASKS
 
     # branch task
     branch_op = BranchPythonOperator(
@@ -119,33 +119,30 @@ with DAG(
     get_start = EmptyOperator(task_id = 'get_start', trigger_rule = 'all_done')
     get_end = EmptyOperator(task_id = 'get_end')
 
-    task_savedata = PythonOperator(
-        task_id = 'save_data',
-        python_callable=save_data,
-        trigger_rule= "one_success"
-    )
-
+    # Clear reexisting tasks
     rm_dir = BashOperator(
         task_id = "rm_dir",
         bash_command="rm -rf /home/nishtala/code/movie_saved/load_dt={{ds_nodash}}",
         trigger_rule = "all_done"
     )
 
+    # what are we doing?
     echo_task = BashOperator(
         task_id='echo_task',
         bash_command="echo 'task'",
         trigger_rule = "all_done"
     )
 
+    # obligatory error throw test
     throw_err = BashOperator(
         task_id = "err",
         bash_command = "exit 1",
         trigger_rule="one_success"
     )
 
-    # DAG flow
+###### DAG flow
     task_start >> branch_op
-    task_start >> throw_err >> task_savedata
+    task_start >> throw_err >> task_end
 
     branch_op >> [rm_dir, echo_task]
     branch_op >> get_start
@@ -153,5 +150,5 @@ with DAG(
     rm_dir >> get_start
 
     get_start >> [mult_y, mult_n, nation_k, nation_f] >> get_end
-    get_end >> task_savedata >> task_end
+    get_end >>task_end
 
