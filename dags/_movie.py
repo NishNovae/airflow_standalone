@@ -27,12 +27,34 @@ with DAG(
     tags=['api', 'movie', 'amt'],
 ) as dag:
 
-##### FUNCTIONS
+    def get_data(ds, **kwargs):
+        print(ds)
+        print(kwargs)
+        print("=" * 20) 
+        print(f"kwargs type => {type(kwargs)}")
+        print("=" * 20)
 
-    # save data
+        from mov.api.call import save2df, list2df, get_key, req, gen_url
+        key = get_key()
+        print(f"MOVIE_API_KEY => {key}")
+        YYYYMMDD = kwargs['ds_nodash']
+        df = save2df(YYYYMMDD)
+        print(df.head(5))
+
+    def print_context(ds=None, **kwargs):
+        # """Print the Airflow context and ds variable from the context."""
+        print("::group::All kwargs")
+        pprint(kwargs)
+        print("::endgroup::")
+        print("::group::Context variable ds")
+        print(ds)
+        print("::endgroup::")
+        return "Whatever you return gets printed in the logs"
+
     def save_data(ds_nodash):
         from mov.api.call import apply_type2df
         df = apply_type2df(load_dt=ds_nodash) 
+
         print("*"*33)
         print(df.head(10))
         print("*"*33)
@@ -52,72 +74,35 @@ with DAG(
         else:
             return "get_data", "echo_task"        # ?
 
-    # Multitool
-    def func_multitool(**kwargs):
-        from mov.api.call import save2df
-
-        url_p = kwargs['url_param']
-        ds_nodash = kwargs['ds_nodash']
-
-        print(url_p)
-        print(ds_nodash)
-
-        df = save2df(load_dt=ds_nodash, url_param= url_p)
-        print(df.head(5))
-
-
-####### TASKS
-
-    # branch task
     branch_op = BranchPythonOperator(
         task_id="branch.op",
         python_callable=branch_fun
     )
 
-    # task start & finish
+#    run_this = PythonOperator(
+#        task_id="print_the_context", 
+#        python_callable=print_context,
+#    )
+
     task_start = EmptyOperator(task_id = 'start', trigger_rule = 'all_done')
     task_end = EmptyOperator(task_id = 'end', trigger_rule = 'all_success')
 
-    # Multitool Tasks
-    mult_y = PythonVirtualenvOperator(
-        task_id = 'mult.yn',
-        python_callable=func_multitool,
-        op_kwargs= { 'url_param': { 'multiMovieYn' : 'Y'}},
-        system_site_packages=False,
-        requirements=["git+https://github.com/NishNovae/movie.git@main"],
-        trigger_rule = 'all_done'
-    ) 
+    mult_y = EmptyOperator(task_id = 'mult.yn', trigger_rule = 'all_done')        # 
+    mult_n = EmptyOperator(task_id = 'mult.n', trigger_rule = 'all_done')
+    nation_k = EmptyOperator(task_id = 'nat.k', trigger_rule = 'all_done')
+    nation_f = EmptyOperator(task_id = 'nat.f', trigger_rule = 'all_done')
 
-    mult_n = PythonVirtualenvOperator(
-        task_id = 'mult.n',
-        python_callable=func_multitool,
-        op_kwargs= { 'url_param': { 'multiMovieYn' : 'N'}},
-        system_site_packages=False,
-        requirements=["git+https://github.com/NishNovae/movie.git@main"],
-        trigger_rule = 'all_done'
-    )
-   
-    nation_k = PythonVirtualenvOperator(
-        task_id = 'nation.k',
-        python_callable=func_multitool,
-        op_kwargs= { 'url_param': { 'repNationCd' : 'K'}},
-        system_site_packages=False,
-        requirements=["git+https://github.com/NishNovae/movie.git@main"],
-        trigger_rule = 'all_done'
-    )
-
-    nation_f = PythonVirtualenvOperator(
-        task_id = 'nation.f',
-        python_callable=func_multitool,
-        op_kwargs= { 'url_param': { 'repNationCd' : 'F'}},
-        system_site_packages=False,
-        requirements=["git+https://github.com/NishNovae/movie.git@main"],
-        trigger_rule = 'all_done'
-    )
-
-    # Dummy Operators for task wrapping
     get_start = EmptyOperator(task_id = 'get_start', trigger_rule = 'all_done')
     get_end = EmptyOperator(task_id = 'get_end')
+
+    task_getdata = PythonVirtualenvOperator(
+        task_id = 'get_data',   # ds, **kwargs given when called
+        python_callable=get_data, 
+        requirements = ["git+https://github.com/NishNovae/movie.git@main"],
+        system_site_packages=False,
+        trigger_rule="all_success",
+        venv_cache_path="/home/nishtala/tmp/airflow_venv/get_data"       # only absolute path
+    )
 
     task_savedata = PythonOperator(
         task_id = 'save_data',
@@ -152,6 +137,5 @@ with DAG(
 
     rm_dir >> get_start
 
-    get_start >> [mult_y, mult_n, nation_k, nation_f] >> get_end
+    get_start >> [task_getdata, mult_y, mult_n, nation_k, nation_f] >> get_end
     get_end >> task_savedata >> task_end
-
