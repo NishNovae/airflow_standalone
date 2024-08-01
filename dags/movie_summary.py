@@ -12,6 +12,12 @@ from airflow.operators.python import (
     BranchPythonOperator,
     is_venv_installed,
 )
+###### GLOBAL VARIABLE
+
+REQUIREMENTS = [
+   #"git+https://github.com/NishNovae/movie.git@main" 
+   "git+https://github.com/NishNovae/movie_agg.git@0.5/agg" 
+]
 
 with DAG(
         'movie_summary',
@@ -29,13 +35,62 @@ with DAG(
 
 ###### FUNCTIONS
 
-    def type_pq():
-        pass
+    # Generators
+    def gen_empty(*ids):
+        tasks = []
+        for id in ids:
+            tasks.append( EmptyOperator(task_id=id) )
+        return tasks        # list to tuple assingment auto unpacks
 
-    def merge_pq():
+
+    def gen_vpython(ids=[], funcs=[], opkws=[], trs=[]):
+        tasks = []
+        # zip: tie three lists together to a tuple!
+        for id, func, opkw, tr in zip(ids, funcs, opkws, trs):
+            task = PythonVirtualenvOperator(
+                task_id = id,
+                python_callable = func,
+                system_site_packages = False,
+                op_kwargs = opkw,
+                requirements = REQUIREMENTS, ### global variable
+                trigger_rule = tr
+            )
+            tasks.append(task)
+        return tasks
+
+
+    # Producure Data
+    def pro_data(**params):
+        print("@" * 33)
+        print(params['task_name'])
+        print(params)
+        print("@" * 33)
+
+    def pro_data2(task_name, **params):
+        print("@" * 33)
+        print(task_name)
+        print(params)
+        print("@" * 33)
+    
+    def pro_data3(task_name):
+        print("@" * 33)
+        print(task_name)
+        print("@" * 33)
+        
+    def pro_data4(task_name, ds_nodash, **kwargs):
+        print("@" * 33)
+        print(task_name)
+        print(ds_nodash)
+        print(kwargs)
+        print("@" * 33)
+    
+    def merge_df():
         pass
 
     def rm_dupe():
+        pass
+
+    def type_df():
         pass
 
     def df_summ():
@@ -44,29 +99,29 @@ with DAG(
 ###### Tasks
 
     # task start & finish
-    task_start = EmptyOperator(task_id = 'start', trigger_rule = 'all_done')
-    task_end = EmptyOperator(task_id = 'end', trigger_rule = 'all_done')
+    task_start, task_end = gen_empty('start', 'end')
 
-    # Type
-    apply_type = EmptyOperator(
-        task_id = 'apply.type'
+    # PythonVirtualenvOperations
+    merge_df, del_dupe, apply_type, summary_df = gen_vpython(
+        ids = ['merge.df', 'del.dupe', 'apply.type', 'summary.df'],
+        funcs = [
+            merge_df,
+            rm_dupe, 
+            type_df, 
+            df_summ
+        ],
+        opkws = [ 
+            { "task_name": "apply.type" }, 
+            { "task_name": "merge.df" }, 
+            { "task_name": "del.dupe" }, 
+            { "task_name": "summary_df" } 
+        ],
+        trs = ['all_success', 'all_success', 'all_success', 'all_success']
     )
 
-    # Merge
-    merge_df = EmptyOperator(
-        task_id = 'merge.df'
-    )
-
-    # Delete Duplicates
-    del_dupe = EmptyOperator(
-        task_id = 'del.dupe'
-    )
-
-    # Summary
-    summary_df = EmptyOperator(
-        task_id = 'summary.df'
-    )
 
 ##### DAG Flow
 
-task_start >> apply_type >> merge_df >> del_dupe >> summary_df >> task_end
+task_start >> merge_df >> del_dupe >> apply_type >> summary_df >> task_end
+
+

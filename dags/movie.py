@@ -47,7 +47,7 @@ with DAG(
     def func_multitool(**kwargs):
         from mov.api.call import save2df, list2df
 
-        url_p = kwargs['url_param']         # { KEY: VAL }
+        url_p = kwargs['url_param']         # { 'multiMovieYn': 'Y' }
         key = next(iter(url_p))             # returns KEY
         ds_nodash = kwargs['ds_nodash']
         PARQ_PATH="/home/nishtala/code/movie_saved/"
@@ -61,6 +61,7 @@ with DAG(
         # add two new columns
         df['load_dt'] = ds_nodash
         df[str(key)] = url_p[key]
+        print(df.head(10))
 
         # parquet, partition, save
         df.to_parquet(PARQ_PATH, partition_cols=['load_dt', str(key)])
